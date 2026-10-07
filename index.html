@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Haptic Vision Navigation Headband</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4"/></symbol>
+  <symbol id="i-spk" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 010 6M18.5 6.5a8 8 0 010 11"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2-6 4 12 2-6h6"/></symbol>
+  <symbol id="i-nav" viewBox="0 0 24 24"><path d="M21 3L3 11l7 3 3 7z"/></symbol>
+  <symbol id="i-hand" viewBox="0 0 24 24"><rect x="7" y="6" width="10" height="12" rx="3"/><path d="M9 6l1-3h4l1 3M9 18l1 3h4l1-3"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4M12 11v10"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M9 12h6M9 16h6"/></symbol>
+</svg>
+
+<div class="app">
+  <div class="logo"><img src="assets/icons/logo.svg" alt="Headband logo"></div>
+
+  <header class="top">
+    <div class="title">
+      <h1>AI HAPTIC VISION <b>NAVIGATION HEADBAND</b></h1>
+      <p class="tag">See the Path. Feel the Direction. Navigate with Confidence.</p>
+      <p class="sub">Proof of Concept — Real-Time Object Detection and Navigation</p>
+    </div>
+    <div class="pills">
+      <div class="pill"><svg class="ic"><use href="#i-cam"/></svg><div><b>Camera</b><span id="v-cam" class="dot off">Off</span></div></div>
+      <div class="pill"><svg class="ic"><use href="#i-chip"/></svg><div><b>YOLOv8</b><span id="v-yolo" class="dot off">Not connected</span></div></div>
+      <div class="pill"><svg class="ic"><use href="#i-spk"/></svg><div><b>Voice</b><span id="v-voice" class="dot off">Standby</span></div></div>
+      <div class="pill"><svg class="ic"><use href="#i-pulse"/></svg><div><b>Haptic</b><span class="dot sim">Simulation</span></div></div>
+    </div>
+    <div class="clock"><span id="date"></span><span id="time"></span></div>
+  </header>
+
+  <aside class="side">
+    <div class="sidecard">
+      <h3>System Control</h3>
+      <button id="btnStart" class="b green">▶ Start System</button>
+      <button id="btnDemo" class="b white">◈ Demo Mode</button>
+      <button id="btnStop" class="b red">■ Stop System</button>
+    </div>
+    <div class="sidecard">
+      <h3>AI Pipeline</h3>
+      <ol id="pipe">
+        <li>Laptop camera</li><li>YOLOv8 detection</li><li>Object position</li><li>Navigation decision</li><li>Voice + haptic</li>
+      </ol>
+      <p class="note">Laptop-only proof of concept</p>
+    </div>
+  </aside>
+
+  <main>
+    <section class="card cam">
+      <h2><svg class="ic"><use href="#i-cam"/></svg>Live Camera Feed (Laptop Camera)<span id="live" class="tagpill off">OFF</span></h2>
+      <div id="camBox">
+        <video id="video" autoplay muted playsinline></video>
+        <img id="stream" alt="">
+        <div id="boxes"></div>
+        <div id="camMsg"><span>Press <b>Start System</b> to open the laptop camera</span></div>
+        <div id="mode" class="modechip">STANDBY</div>
+        <div id="demoTag" hidden>DEMO DATA — NOT REAL YOLO DETECTIONS</div>
+      </div>
+    </section>
+
+    <section class="card navc">
+      <h2><svg class="ic"><use href="#i-nav"/></svg>Navigation Direction</h2>
+      <div id="tile" class="tile idle">
+        <svg id="tileIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 100 18 9 9 0 000-18z" opacity=".25"/></svg>
+        <div id="tileText">STANDBY</div>
+      </div>
+      <div id="tileSub" class="tilesub">Waiting for a command</div>
+    </section>
+
+    <div class="rightcol">
+      <section class="card voice">
+        <h2><svg class="ic"><use href="#i-spk"/></svg>Voice Output<span id="vState" class="tagpill ready">READY</span></h2>
+        <div id="wave"></div>
+        <div id="vText" class="quote">—</div>
+      </section>
+      <section class="card hapc">
+        <h2><svg class="ic"><use href="#i-hand"/></svg>Wristband Haptic Feedback<span class="tagpill sim">SIMULATION</span></h2>
+        <div class="hap" id="hap">
+          <div class="arcs l"><i></i><i></i><i></i></div>
+          <svg viewBox="0 0 50 80" class="watch"><rect x="15" y="0" width="20" height="16" rx="4" fill="#243b6b"/><rect x="15" y="64" width="20" height="16" rx="4" fill="#243b6b"/><rect x="6" y="12" width="38" height="56" rx="11" fill="#111d3a"/><rect x="11" y="18" width="28" height="44" rx="7" fill="#1d3a73"/><circle cx="25" cy="40" r="6" fill="#38bdf8" opacity=".8"/></svg>
+          <div class="arcs r"><i></i><i></i><i></i></div>
+        </div>
+        <div id="hapState" class="hapbtn">VIBRATION READY</div>
+        <div class="note">(Simulation only – No physical hardware)</div>
+      </section>
+    </div>
+
+    <section class="card objs">
+      <h2><svg class="ic"><use href="#i-box"/></svg>Detected Objects</h2>
+      <div class="scroll"><table><thead><tr><th>#</th><th>Object</th><th>Confidence</th><th>Position</th></tr></thead>
+      <tbody id="objBody"><tr><td colspan="4" class="mut">No detections yet. Waiting for YOLOv8 or Demo Mode.</td></tr></tbody></table></div>
+    </section>
+
+    <section class="card posc">
+      <h2><svg class="ic"><use href="#i-target"/></svg>Object Position (Horizontal View)</h2>
+      <div class="zones">
+        <div class="zone zl"><h3>LEFT</h3><div id="z-left"></div></div>
+        <div class="zone zc"><h3>CENTER</h3><div id="z-center"></div></div>
+        <div class="zone zr"><h3>RIGHT</h3><div id="z-right"></div></div>
+      </div>
+      <div class="user"><svg viewBox="0 0 40 24"><path d="M0 24L10 4h20l10 20z" fill="#cbd5e1"/><circle cx="20" cy="12" r="4" fill="#12306b"/><path d="M12 24c0-6 4-8 8-8s8 2 8 8z" fill="#12306b"/></svg></div>
+    </section>
+
+    <section class="card logc">
+      <h2><svg class="ic"><use href="#i-doc"/></svg>Navigation Log<button id="btnClear" class="mini">Clear</button></h2>
+      <ul id="log"></ul>
+    </section>
+  </main>
+</div>
+
+<script src="audio-map.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

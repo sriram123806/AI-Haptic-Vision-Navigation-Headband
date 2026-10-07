@@ -1,0 +1,28 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# Redundant archives and extracted zip folders
+ai-haptic-navigation-dashboard/
+ai-haptic-navigation-dashboard.zip
+scratch_package/
+.system_generated/
+
+# System & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# External large assets
+*.pdf.tmp
+Purple and Blue Futuristic AI and Robotics Poster.pdf
