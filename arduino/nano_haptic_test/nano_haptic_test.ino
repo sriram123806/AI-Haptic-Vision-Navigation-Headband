@@ -49,15 +49,15 @@ const int LEFT_MOTOR_PIN = 5;   // D5 → 2N2222 → Left vibration motor
 const int RIGHT_MOTOR_PIN= 6;   // D6 → 2N2222 → Right vibration motor
 
 // ── Timing & Power Constants ─────────────────────────────────────────────────────────
-const int MOTOR_PWM_POWER  = 150;  // Safe ~3.0V drive for 3V vibration motors (prevents USB 5V dip)
-const int SINGLE_PULSE_ON  = 200;  // Motor ON duration for L or R command (ms)
-const int SINGLE_PULSE_OFF = 40;   // Motor OFF settle time (ms)
+const int MOTOR_PWM_POWER  = 160;   // Safe ~3.2V drive for vibration motors / bright for LEDs
+const int SINGLE_PULSE_ON  = 1200;  // 1.2 FULL SECONDS: Clearly visible light and noticeable vibration
+const int SINGLE_PULSE_OFF = 100;   // Settle time between commands
 
-const int ALERT_PULSE_ON   = 80;   // Motor ON duration for alert burst (ms)
-const int ALERT_PULSE_OFF  = 50;   // Motor OFF gap between alert bursts (ms)
-const int ALERT_REPEATS    = 2;    // Number of burst repeats for S command
+const int ALERT_PULSE_ON   = 250;   // 250 ms burst for alert pulses
+const int ALERT_PULSE_OFF  = 150;   // 150 ms gap between alert pulses
+const int ALERT_REPEATS    = 3;     // 3 distinct alert bursts for S command
 
-const int LED_BLINK_MS     = 30;   // Quick built-in LED blink duration (visual only)
+const int LED_BLINK_MS     = 100;   // Visual confirmation duration
 
 // ─────────────────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -101,25 +101,31 @@ void loop() {
       // ── L: Obstacle on LEFT → steer RIGHT → RIGHT wrist vibrates ──────────────
       case 'L':
         Serial.println("ACK:L");
+        digitalWrite(LED_PIN, HIGH);
         pulseMotor(RIGHT_MOTOR_PIN, SINGLE_PULSE_ON);
+        digitalWrite(LED_PIN, LOW);
         break;
 
       // ── R: Obstacle on RIGHT → steer LEFT → LEFT wrist vibrates ───────────────
       case 'R':
         Serial.println("ACK:R");
+        digitalWrite(LED_PIN, HIGH);
         pulseMotor(LEFT_MOTOR_PIN, SINGLE_PULSE_ON);
+        digitalWrite(LED_PIN, LOW);
         break;
 
       // ── S: STOP / Hazard → Alternating dual pulses (distinct alert, avoids current spike) ──
       case 'S':
         Serial.println("ACK:S");
         alertBothMotors();
+        digitalWrite(LED_PIN, LOW);
         break;
 
       // ── C: Clear / Straight / Start walking → ALL motors OFF ───────────────────
       case 'C':
         Serial.println("ACK:C");
         stopAllMotors();
+        digitalWrite(LED_PIN, LOW);
         break;
 
       default:
@@ -134,6 +140,8 @@ void loop() {
 // pulseMotor(): turn ONE motor ON with soft start & soft stop to protect power rail
 // ─────────────────────────────────────────────────────────────────────────────────────
 void pulseMotor(int pin, int durationMs) {
+  digitalWrite(LED_PIN, HIGH);  // Turn on onboard Pin 13 LED for visible proof
+
   // Soft start ramp (prevents instant inrush current surge)
   for (int p = 40; p <= MOTOR_PWM_POWER; p += 35) {
     analogWrite(pin, p);
@@ -149,6 +157,7 @@ void pulseMotor(int pin, int durationMs) {
   }
   analogWrite(pin, 0);
   digitalWrite(pin, LOW);
+  digitalWrite(LED_PIN, LOW);   // Turn off onboard Pin 13 LED
   delay(SINGLE_PULSE_OFF);  // settle time
 }
 
@@ -157,21 +166,25 @@ void pulseMotor(int pin, int durationMs) {
 // ─────────────────────────────────────────────────────────────────────────────────────
 void alertBothMotors() {
   for (int i = 0; i < ALERT_REPEATS; i++) {
-    // Pulse Left
+    // Pulse Left + LED
+    digitalWrite(LED_PIN, HIGH);
     for (int p = 40; p <= MOTOR_PWM_POWER; p += 40) { analogWrite(LEFT_MOTOR_PIN, p); delay(5); }
     delay(ALERT_PULSE_ON);
     for (int p = MOTOR_PWM_POWER; p >= 0; p -= 40) { analogWrite(LEFT_MOTOR_PIN, p); delay(5); }
     analogWrite(LEFT_MOTOR_PIN, 0);
     digitalWrite(LEFT_MOTOR_PIN, LOW);
+    digitalWrite(LED_PIN, LOW);
 
     delay(30);
 
-    // Pulse Right
+    // Pulse Right + LED
+    digitalWrite(LED_PIN, HIGH);
     for (int p = 40; p <= MOTOR_PWM_POWER; p += 40) { analogWrite(RIGHT_MOTOR_PIN, p); delay(5); }
     delay(ALERT_PULSE_ON);
     for (int p = MOTOR_PWM_POWER; p >= 0; p -= 40) { analogWrite(RIGHT_MOTOR_PIN, p); delay(5); }
     analogWrite(RIGHT_MOTOR_PIN, 0);
     digitalWrite(RIGHT_MOTOR_PIN, LOW);
+    digitalWrite(LED_PIN, LOW);
 
     delay(ALERT_PULSE_OFF);
   }
