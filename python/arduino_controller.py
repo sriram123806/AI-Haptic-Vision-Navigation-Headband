@@ -27,14 +27,15 @@ COMMAND_TO_SERIAL: Dict[str, str] = {
 }
 
 
-def find_arduino_port() -> Optional[str]:
+def find_arduino_port(verbose: bool = True) -> Optional[str]:
     """
     Scans available COM ports for an Arduino Nano (including CH340, FTDI, and official boards).
     Returns the port string (e.g. 'COM7') if a unique match is found, otherwise None.
     """
     ports = list(serial.tools.list_ports.comports())
     if not ports:
-        print("[ARDUINO] No serial ports found on this system.")
+        if verbose:
+            print("[ARDUINO] No serial ports found on this system.")
         return None
 
     candidates = []
@@ -50,21 +51,24 @@ def find_arduino_port() -> Optional[str]:
 
     if len(candidates) == 1:
         match = candidates[0]
-        print(f"[ARDUINO] Auto-detected Arduino device on {match.device} ({match.description})")
+        if verbose:
+            print(f"[ARDUINO] Auto-detected Arduino device on {match.device} ({match.description})")
         return match.device
 
     if len(candidates) > 1:
-        print(f"[ARDUINO WARNING] Multiple potential Arduino devices detected:")
-        for c in candidates:
-            print(f"  - {c.device}: {c.description} ({c.hwid})")
-        print("  Please specify ARDUINO_PORT in python/config.py to select one explicitly.")
+        if verbose:
+            print(f"[ARDUINO WARNING] Multiple potential Arduino devices detected:")
+            for c in candidates:
+                print(f"  - {c.device}: {c.description} ({c.hwid})")
+            print("  Please specify ARDUINO_PORT in python/config.py to select one explicitly.")
         return None
 
     # No obvious match among ports
-    print("[ARDUINO] Could not automatically identify an Arduino Nano among available ports:")
-    for p in ports:
-        print(f"  - {p.device}: {p.description}")
-    print("  Set ARDUINO_PORT = 'COMX' in python/config.py to specify your port manually.")
+    if verbose:
+        print("[ARDUINO] Could not automatically identify an Arduino Nano among available ports:")
+        for p in ports:
+            print(f"  - {p.device}: {p.description}")
+        print("  Set ARDUINO_PORT = 'COMX' in python/config.py to specify your port manually.")
     return None
 
 
@@ -141,8 +145,9 @@ class ArduinoController:
         """
         Dedicated background worker: manages connect/reconnect, non-blocking TX, and incoming RX.
         """
-        reconnect_delay = 3.0
+        reconnect_delay = 5.0
         last_reconnect_attempt = 0.0
+        first_attempt = True
 
         while self._running:
             # 1. Ensure serial port is connected
@@ -150,7 +155,8 @@ class ArduinoController:
                 now = time.time()
                 if now - last_reconnect_attempt >= reconnect_delay:
                     last_reconnect_attempt = now
-                    port_to_try = self._resolve_port()
+                    port_to_try = self._resolve_port(verbose=first_attempt)
+                    first_attempt = False
                     if port_to_try:
                         self._connect(port_to_try)
                     else:
@@ -166,8 +172,6 @@ class ArduinoController:
                     self._serial.write(message)
                     self._serial.flush()
                     self.last_sent_command = code
-                    # Debug log throttled
-                    # print(f"[ARDUINO TX] Sent: {code}")
             except Exception as e:
                 print(f"[ARDUINO ERROR] Write error: {e}")
                 self._disconnect()
@@ -187,9 +191,7 @@ class ArduinoController:
                         elif line.startswith("ACK:"):
                             self.last_ack = line
                             self.last_ack_time = time.time()
-                            # print(f"[ARDUINO RX] {line}")
                         else:
-                            # Other debug outputs from Arduino
                             self.last_ack = line
                             self.last_ack_time = time.time()
             except Exception as e:
@@ -198,6 +200,12 @@ class ArduinoController:
                 continue
 
             time.sleep(0.01)
+
+    def _resolve_port(self, verbose: bool = True) -> Optional[str]:
+        """Resolves target port either from configuration or auto-detection."""
+        if not self.configured_port or self.configured_port.upper() == "AUTO":
+            return find_arduino_port(verbose=verbose)
+        return self.configured_port
 
     def _connect(self, port_name: str):
         """Opens the serial connection with proper DTR reset handling."""
@@ -221,7 +229,12 @@ class ArduinoController:
             self.status = "Connected"
             print(f"[ARDUINO] Successfully connected to {port_name}.")
         except (serial.SerialException, OSError) as e:
-            print(f"[ARDUINO] Failed to open {port_name}: {e}")
+            err_str = str(e)
+            if "PermissionError" in err_str or "Access is denied" in err_str:
+                print(f"[ARDUINO] Access denied to {port_name}: The COM port is currently locked by another application.")
+                print("          -> If Arduino IDE Serial Monitor is open, please close the Serial Monitor tab.")
+            else:
+                print(f"[ARDUINO] Failed to open {port_name}: {e}")
             self._disconnect()
 
     def _disconnect(self):
