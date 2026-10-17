@@ -74,6 +74,7 @@ class AIPipeline:
         self.running = False
         self.last_log_print_time = 0.0
         self.last_state_send_time = 0.0
+        self.last_haptic_time = 0.0
         self.last_logged_command = None
 
     def start(self):
@@ -144,13 +145,19 @@ class AIPipeline:
             # 4. Compute navigation guidance via decision engine
             command, log_msg, sub_msg, is_new_command = self.nav_engine.decide(enriched_detections)
 
-            # Transmit confirmed navigation command to Arduino Nano
-            if is_new_command:
+            now = time.time()
+
+            # Transmit confirmed navigation command to Arduino Nano:
+            # Trigger immediately on command change OR periodically every 2.0s while obstacle/stop persists
+            is_active_guidance = command in ("move_left", "move_right", "stop", "slow_down", "wait_for_a_while")
+            should_repulse = is_active_guidance and (now - self.last_haptic_time >= 2.0)
+
+            if is_new_command or should_repulse:
                 self.arduino.send_navigation_command(command)
+                self.last_haptic_time = now
 
             # 5. Broadcast state to dashboard
             # Send when command changes OR periodically every 0.25s to keep dashboard state fresh
-            now = time.time()
             state_needed = is_new_command or (now - self.last_state_send_time >= 0.25)
             if state_needed:
                 self.sender.send_state(

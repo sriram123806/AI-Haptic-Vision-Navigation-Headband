@@ -57,16 +57,31 @@ def run_serial_test(port_override=None):
         return False
 
     try:
-        # Give Arduino time to reset after DTR toggle
-        print("[TEST] Waiting for Arduino bootloader & ready signal (approx 2s)...")
-        time.sleep(2.0)
-
-        # Check for HAPTIC_READY
+        # Actively wait up to 3 s for the HAPTIC_READY boot message.
+        # Opening the serial port toggles DTR and resets the Arduino; the
+        # Phase-2 sketch takes ~480 ms of startup blinks before it prints
+        # HAPTIC_READY, so we poll instead of sleeping a flat 2 s.
+        print("[TEST] Waiting for Arduino bootloader & ready signal (up to 3s)...")
         boot_msg = ""
-        if ser.in_waiting:
-            boot_msg = ser.readline().decode("ascii", errors="replace").strip()
-            print(f"[TEST] Arduino initial message: '{boot_msg}'")
+        deadline = time.time() + 3.0
+        while time.time() < deadline:
+            if ser.in_waiting:
+                line = ser.readline().decode("ascii", errors="replace").strip()
+                if line:
+                    boot_msg = line
+                    if "HAPTIC_READY" in line:
+                        break   # got the expected boot message — stop waiting
+            else:
+                time.sleep(0.05)
 
+        if boot_msg:
+            print(f"[TEST] Arduino initial message: '{boot_msg}'")
+        else:
+            print("[TEST] WARNING: No boot message received within 3 s — continuing anyway.")
+
+        # Drain any extra bytes that arrived after HAPTIC_READY (e.g. a second
+        # print or stray noise) so the test sequence starts with a clean buffer.
+        time.sleep(0.1)
         ser.reset_input_buffer()
         ser.reset_output_buffer()
 
@@ -85,7 +100,8 @@ def run_serial_test(port_override=None):
         all_passed = True
 
         for idx, (cmd, expected_ack, desc) in enumerate(test_sequence, 1):
-            time.sleep(0.4)  # Small pause between commands
+            time.sleep(0.6)  # Pause to allow motor cycle to complete cleanly
+            ser.reset_input_buffer()  # Ensure clean buffer for this step
             t0 = time.time()
             ser.write(f"{cmd}\n".encode("ascii"))
             ser.flush()

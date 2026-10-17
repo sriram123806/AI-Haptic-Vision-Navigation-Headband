@@ -1,87 +1,128 @@
 /*
   =====================================================================================
-  AI Haptic Vision Navigation Headband — Phase 1: Arduino Nano Serial Receiver Test
+  AI Haptic Vision Navigation Headband — Phase 2: Dual Vibration Motor Control
   =====================================================================================
-  Target Board: Arduino Nano (ATmega328P / CH340 / FTDI)
-  Baud Rate:    115200 bps
-  
-  PHASE 1 OBJECTIVE:
-  - Test and verify bidirectional USB serial communication with the Python AI pipeline.
-  - NO MOTORS OR TRANSISTORS CONNECTED in this phase.
-  - Built-in LED (Pin 13) blinks briefly to give visual feedback on received commands.
-  
-  COMMAND PROTOCOL:
-  Incoming (ASCII, newline-terminated):
-    'L' -> Move Left Command
-    'R' -> Move Right Command
-    'S' -> Stop / Slow Down / Hazard Command
-    'C' -> Clear / Move Straight / System Ready Command
-    
-  Outgoing Acknowledgement:
-    "HAPTIC_READY" -> Broadcasted on board startup/reset
-    "ACK:L"        -> Acknowledging Left command
-    "ACK:R"        -> Acknowledging Right command
-    "ACK:S"        -> Acknowledging Stop command
-    "ACK:C"        -> Acknowledging Clear / Straight command
+  Target Board : Arduino Nano (ATmega328P / CH340 clone)
+  Upload FQBN  : arduino:avr:nano:cpu=atmega328   ← standard bootloader (NOT old)
+  Baud Rate    : 115200 bps
+
+  WIRING (do NOT connect D0/D1 during upload — disconnect after upload is done):
+  ┌────────────┬────────────────────────────────────────────────────────────────────┐
+  │ Arduino D5 │ → 470Ω resistor → 2N2222 Base (Left Motor transistor)             │
+  │ Arduino D6 │ → 470Ω resistor → 2N2222 Base (Right Motor transistor)            │
+  │ 2N2222 Col │ ← Left / Right vibration motor negative lead                      │
+  │ Motor +    │ → Arduino 5V (or external 5V rail, shared GND with Arduino)       │
+  │ 1N4001     │ Across each motor (cathode to 5V, anode to Collector) — flyback   │
+  │ 2N2222 Emit│ → GND (shared with Arduino GND)                                   │
+  │ Pin 13 LED │ Built-in LED — quick blink on every command receipt                │
+  └────────────┴────────────────────────────────────────────────────────────────────┘
+
+  LED-FIRST TEST (safe — no motors needed):
+    Wire an LED + 220Ω resistor from D5 → GND and another from D6 → GND.
+    Send L / R / S / C via test_arduino.py and watch the LEDs before adding motors.
+
+  COMMAND PROTOCOL (unchanged from Phase 1 — Python side sends these):
+  ┌─────┬──────────────────────────────────┬───────────────────────────────────┐
+  │ CMD │ Python Navigation Command        │ Motor Action (Phase 2)            │
+  ├─────┼──────────────────────────────────┼───────────────────────────────────┤
+  │  L  │ move_left                        │ RIGHT motor pulses (obstacle left)│
+  │  R  │ move_right                       │ LEFT motor pulses (obstacle right)│
+  │  S  │ stop / slow_down / hazard        │ BOTH motors rapid-pulse (alert)   │
+  │  C  │ move_straight / start_walking    │ ALL motors OFF (clear path)       │
+  └─────┴──────────────────────────────────┴───────────────────────────────────┘
+
+  NOTE: "obstacle on LEFT → steer RIGHT → RIGHT wrist vibrates (CMD=L)"
+        This is intentional: the vibration tells the user WHICH WAY to turn.
+
+  OUTGOING ACKNOWLEDGEMENTS (identical to Phase 1 — Python expects these):
+    "HAPTIC_READY"  → sent on boot / reset
+    "ACK:L"         → after processing L
+    "ACK:R"         → after processing R
+    "ACK:S"         → after processing S
+    "ACK:C"         → after processing C
   =====================================================================================
 */
 
-const int LED_PIN = 13; // Built-in LED on Arduino Nano (for visual status only)
+// ── Pin Definitions ──────────────────────────────────────────────────────────────────
+const int LED_PIN        = 13;  // Built-in LED (visual feedback, always available)
+const int LEFT_MOTOR_PIN = 5;   // D5 → 2N2222 → Left vibration motor
+const int RIGHT_MOTOR_PIN= 6;   // D6 → 2N2222 → Right vibration motor
 
+// ── Timing & Power Constants ─────────────────────────────────────────────────────────
+const int MOTOR_PWM_POWER  = 150;  // Safe ~3.0V drive for 3V vibration motors (prevents USB 5V dip)
+const int SINGLE_PULSE_ON  = 200;  // Motor ON duration for L or R command (ms)
+const int SINGLE_PULSE_OFF = 40;   // Motor OFF settle time (ms)
+
+const int ALERT_PULSE_ON   = 80;   // Motor ON duration for alert burst (ms)
+const int ALERT_PULSE_OFF  = 50;   // Motor OFF gap between alert bursts (ms)
+const int ALERT_REPEATS    = 2;    // Number of burst repeats for S command
+
+const int LED_BLINK_MS     = 30;   // Quick built-in LED blink duration (visual only)
+
+// ─────────────────────────────────────────────────────────────────────────────────────
 void setup() {
-  // Initialize USB serial at 115200 baud (must match Python config)
   Serial.begin(115200);
-  
-  // Set built-in LED as output for visual status
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, LOW);
-  
-  // Brief startup blink sequence (indicates boot)
+
+  pinMode(LED_PIN,         OUTPUT);
+  pinMode(LEFT_MOTOR_PIN,  OUTPUT);
+  pinMode(RIGHT_MOTOR_PIN, OUTPUT);
+
+  // Ensure everything starts OFF
+  digitalWrite(LED_PIN,         LOW);
+  digitalWrite(LEFT_MOTOR_PIN,  LOW);
+  digitalWrite(RIGHT_MOTOR_PIN, LOW);
+
+  // Startup blink sequence (3 quick blinks → board is alive)
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, HIGH);
-    delay(60);
+    delay(80);
     digitalWrite(LED_PIN, LOW);
-    delay(60);
+    delay(80);
   }
 
-  // Announce ready status to the Python host
+  // Announce ready — Python ArduinoController waits for this line
   Serial.println("HAPTIC_READY");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────────────
 void loop() {
-  // Check if serial data has arrived from Python
   if (Serial.available() > 0) {
     char cmd = Serial.read();
 
-    // Ignore carriage return or newline characters
+    // Discard whitespace and line-terminator characters
     if (cmd == '\r' || cmd == '\n' || cmd == ' ') {
       return;
     }
 
-    // Process single-character protocol commands
+    blinkLed(); // Visual confirmation on every valid command
+
     switch (cmd) {
-      case 'L': // Move Left
-        blinkLed();
+
+      // ── L: Obstacle on LEFT → steer RIGHT → RIGHT wrist vibrates ──────────────
+      case 'L':
         Serial.println("ACK:L");
+        pulseMotor(RIGHT_MOTOR_PIN, SINGLE_PULSE_ON);
         break;
 
-      case 'R': // Move Right
-        blinkLed();
+      // ── R: Obstacle on RIGHT → steer LEFT → LEFT wrist vibrates ───────────────
+      case 'R':
         Serial.println("ACK:R");
+        pulseMotor(LEFT_MOTOR_PIN, SINGLE_PULSE_ON);
         break;
 
-      case 'S': // Stop / Slow down / Hazard
-        blinkLed();
+      // ── S: STOP / Hazard → Alternating dual pulses (distinct alert, avoids current spike) ──
+      case 'S':
         Serial.println("ACK:S");
+        alertBothMotors();
         break;
 
-      case 'C': // Clear path / Move straight / System ready
-        blinkLed();
+      // ── C: Clear / Straight / Start walking → ALL motors OFF ───────────────────
+      case 'C':
         Serial.println("ACK:C");
+        stopAllMotors();
         break;
 
       default:
-        // Report unrecognized character for debugging
         Serial.print("ERR:UNKNOWN_");
         Serial.println(cmd);
         break;
@@ -89,9 +130,68 @@ void loop() {
   }
 }
 
-// Quick 25ms blink on pin 13 to visually confirm command receipt
+// ─────────────────────────────────────────────────────────────────────────────────────
+// pulseMotor(): turn ONE motor ON with soft start & soft stop to protect power rail
+// ─────────────────────────────────────────────────────────────────────────────────────
+void pulseMotor(int pin, int durationMs) {
+  // Soft start ramp (prevents instant inrush current surge)
+  for (int p = 40; p <= MOTOR_PWM_POWER; p += 35) {
+    analogWrite(pin, p);
+    delay(5);
+  }
+  analogWrite(pin, MOTOR_PWM_POWER);
+  delay(durationMs);
+
+  // Soft stop ramp (smooth current decay eliminates inductive flyback spike)
+  for (int p = MOTOR_PWM_POWER; p >= 0; p -= 35) {
+    analogWrite(pin, p);
+    delay(5);
+  }
+  analogWrite(pin, 0);
+  digitalWrite(pin, LOW);
+  delay(SINGLE_PULSE_OFF);  // settle time
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// alertBothMotors(): alternating soft pulses between Left & Right
+// ─────────────────────────────────────────────────────────────────────────────────────
+void alertBothMotors() {
+  for (int i = 0; i < ALERT_REPEATS; i++) {
+    // Pulse Left
+    for (int p = 40; p <= MOTOR_PWM_POWER; p += 40) { analogWrite(LEFT_MOTOR_PIN, p); delay(5); }
+    delay(ALERT_PULSE_ON);
+    for (int p = MOTOR_PWM_POWER; p >= 0; p -= 40) { analogWrite(LEFT_MOTOR_PIN, p); delay(5); }
+    analogWrite(LEFT_MOTOR_PIN, 0);
+    digitalWrite(LEFT_MOTOR_PIN, LOW);
+
+    delay(30);
+
+    // Pulse Right
+    for (int p = 40; p <= MOTOR_PWM_POWER; p += 40) { analogWrite(RIGHT_MOTOR_PIN, p); delay(5); }
+    delay(ALERT_PULSE_ON);
+    for (int p = MOTOR_PWM_POWER; p >= 0; p -= 40) { analogWrite(RIGHT_MOTOR_PIN, p); delay(5); }
+    analogWrite(RIGHT_MOTOR_PIN, 0);
+    digitalWrite(RIGHT_MOTOR_PIN, LOW);
+
+    delay(ALERT_PULSE_OFF);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// stopAllMotors(): immediately cut power to both motors
+// ─────────────────────────────────────────────────────────────────────────────────────
+void stopAllMotors() {
+  analogWrite(LEFT_MOTOR_PIN, 0);
+  analogWrite(RIGHT_MOTOR_PIN, 0);
+  digitalWrite(LEFT_MOTOR_PIN, LOW);
+  digitalWrite(RIGHT_MOTOR_PIN, LOW);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────────────
+// blinkLed(): quick LED flash on pin 13 — visual command receipt confirmation
+// ─────────────────────────────────────────────────────────────────────────────────────
 void blinkLed() {
   digitalWrite(LED_PIN, HIGH);
-  delay(25);
+  delay(LED_BLINK_MS);
   digitalWrite(LED_PIN, LOW);
 }
