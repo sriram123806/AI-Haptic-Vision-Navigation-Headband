@@ -21,13 +21,17 @@ from python.config import (
     API_BASE_URL,
     API_STATE_URL,
     API_FRAME_URL,
-    SEND_FRAMES_TO_SERVER
+    SEND_FRAMES_TO_SERVER,
+    ARDUINO_ENABLED,
+    ARDUINO_PORT,
+    ARDUINO_BAUD
 )
 from python.camera import Camera
 from python.detector import ObjectDetector
 from python.position_analyzer import PositionAnalyzer
 from python.navigation_engine import NavigationEngine
 from python.state_sender import StateSender
+from python.arduino_controller import ArduinoController
 
 
 def is_server_running(host="127.0.0.1", port=8000) -> bool:
@@ -65,6 +69,7 @@ class AIPipeline:
         self.analyzer = PositionAnalyzer()
         self.nav_engine = NavigationEngine()
         self.sender = StateSender(state_url=API_STATE_URL, frame_url=API_FRAME_URL)
+        self.arduino = ArduinoController(port=ARDUINO_PORT, baud=ARDUINO_BAUD, enabled=ARDUINO_ENABLED)
 
         self.running = False
         self.last_log_print_time = 0.0
@@ -95,14 +100,19 @@ class AIPipeline:
             print("[FATAL] Could not open laptop webcam. Please check camera permissions/availability. Exiting.")
             return
 
-        # 3. Initial System Ready handshake to dashboard
-        print("[SYSTEM] Transmitting initial 'system_ready' signal to dashboard...")
+        # 3. Initial System Ready handshake to dashboard & Arduino
+        print("[SYSTEM] Transmitting initial 'system_ready' signal...")
+        self.arduino.send_navigation_command("system_ready")
         self.sender.send_state(
             command="system_ready",
             detections=[],
-            log_message="System initialized — Camera and YOLOv8 ready",
+            log_message="System initialized — Camera, YOLOv8 & Arduino ready",
             sub="All modules ready",
-            demo=False
+            demo=False,
+            arduino_status=self.arduino.status,
+            arduino_command=self.arduino.last_sent_command,
+            arduino_ack=self.arduino.last_ack,
+            arduino_port=self.arduino.active_port or ""
         )
 
         self.running = True
@@ -134,6 +144,10 @@ class AIPipeline:
             # 4. Compute navigation guidance via decision engine
             command, log_msg, sub_msg, is_new_command = self.nav_engine.decide(enriched_detections)
 
+            # Transmit confirmed navigation command to Arduino Nano
+            if is_new_command:
+                self.arduino.send_navigation_command(command)
+
             # 5. Broadcast state to dashboard
             # Send when command changes OR periodically every 0.25s to keep dashboard state fresh
             now = time.time()
@@ -144,7 +158,11 @@ class AIPipeline:
                     detections=enriched_detections,
                     log_message=log_msg,
                     sub=sub_msg,
-                    demo=False
+                    demo=False,
+                    arduino_status=self.arduino.status,
+                    arduino_command=self.arduino.last_sent_command,
+                    arduino_ack=self.arduino.last_ack,
+                    arduino_port=self.arduino.active_port or ""
                 )
                 self.last_state_send_time = now
 
@@ -170,23 +188,37 @@ class AIPipeline:
 
             fps_str = f"{self.camera.current_fps} FPS" if self.camera.current_fps > 0 else ""
             bridge_status = "Connected" if self.sender.is_connected else "Connecting..."
+            ard_info = f"Arduino: {self.arduino.status}"
+            if self.arduino.active_port:
+                ard_info += f" ({self.arduino.active_port})"
+            if self.arduino.last_sent_command != "—":
+                ard_info += f" [TX: {self.arduino.last_sent_command} | ACK: {self.arduino.last_ack}]"
 
-            print(f"[NAV: {command.upper():<14}] Detections: {det_str} | Bridge: {bridge_status} {fps_str}")
+            print(f"[NAV: {command.upper():<14}] Detections: {det_str} | Bridge: {bridge_status} | {ard_info} {fps_str}")
             self.last_log_print_time = now
             self.last_logged_command = command
 
     def stop(self):
-        """Releases camera and network resources cleanly."""
+        """Releases camera, Arduino serial, and network resources cleanly."""
         self.running = False
         print("[SYSTEM] Stopping pipeline...")
         self.camera.release()
+        try:
+            self.arduino.send_navigation_command("stop")
+            self.arduino.close()
+        except Exception:
+            pass
         try:
             self.sender.send_state(
                 command="stop",
                 detections=[],
                 log_message="AI Vision Pipeline Stopped",
                 sub="Camera stopped",
-                demo=False
+                demo=False,
+                arduino_status=self.arduino.status,
+                arduino_command="S",
+                arduino_ack=self.arduino.last_ack,
+                arduino_port=self.arduino.active_port or ""
             )
         except Exception:
             pass

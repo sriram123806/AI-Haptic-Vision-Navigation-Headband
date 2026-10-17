@@ -59,7 +59,10 @@ print(f"[TEST] Navigation decision: Command='{cmd}', Log='{log_msg}'")
 
 # 7. Test State Sender
 sender = StateSender(state_url=f"http://127.0.0.1:{port}/api/state", frame_url=f"http://127.0.0.1:{port}/api/frame")
-sent_state = sender.send_state(cmd, enriched, log_msg, sub_msg, demo=False)
+sent_state = sender.send_state(
+    cmd, enriched, log_msg, sub_msg, demo=False,
+    arduino_status="Connected", arduino_command="C", arduino_ack="ACK:C", arduino_port="COM7"
+)
 assert sent_state, "Failed to send state"
 print("[TEST] State successfully sent via POST /api/state")
 
@@ -71,8 +74,10 @@ print("[TEST] Frame successfully sent via POST /api/frame")
 time.sleep(0.1)
 req2 = urllib.request.urlopen(f"http://127.0.0.1:{port}/api/state", timeout=2)
 data2 = json.loads(req2.read().decode())
-print(f"[TEST] Verified /api/state response: command={data2.get('command')}, has_frame={data2.get('has_frame')}")
+print(f"[TEST] Verified /api/state response: command={data2.get('command')}, arduino_status={data2.get('arduino_status')}, has_frame={data2.get('has_frame')}")
 assert data2.get("command") == cmd, f"Expected command {cmd}, got {data2.get('command')}"
+assert data2.get("arduino_status") == "Connected", "Expected arduino_status to be Connected"
+assert data2.get("arduino_command") == "C", "Expected arduino_command to be C"
 assert data2.get("has_frame") is True, "Expected has_frame to be True"
 
 # Clean up

@@ -131,8 +131,19 @@ async function poll(){
       S.pyAt = Date.now();
       if (S.mode !== "python") setMode("python");
       if (s.has_frame && !S.stream) { S.stream = true; $("stream").src = "/stream"; $("stream").style.display = "block"; $("video").style.display = "none"; $("camMsg").hidden = true; setDot("v-cam", "Active (Python)", "ok"); }
+      if (s.arduino_status) {
+        const cls = s.arduino_status === "Connected" ? "ok" : s.arduino_status === "Connecting" ? "demo" : "off";
+        setDot("v-arduino", s.arduino_status, cls);
+        if ($("ardPortText")) $("ardPortText").textContent = (s.arduino_port ? s.arduino_status + " (" + s.arduino_port + ")" : s.arduino_status);
+        if ($("ardSentCmd")) $("ardSentCmd").textContent = s.arduino_command || "—";
+        if ($("ardAck")) $("ardAck").textContent = s.arduino_ack || "—";
+      }
       if (s.seq !== S.seq) { S.seq = s.seq; apply(s); }
-    } else if (S.pyAt && !fresh) { S.pyAt = 0; setMode(S.cam ? "preview" : "idle"); log("Python bridge disconnected", "sys"); }
+    } else if (S.pyAt && !fresh) {
+      S.pyAt = 0; setMode(S.cam ? "preview" : "idle"); log("Python bridge disconnected", "sys");
+      setDot("v-arduino", "Disconnected", "off");
+      if ($("ardPortText")) $("ardPortText").textContent = "Disconnected";
+    }
   } catch (e) { /* opened without server.py: dashboard still works in Demo Mode */ }
 }
 setInterval(poll, 250);
@@ -165,6 +176,10 @@ function stopSystem(){
   $("video").srcObject = null; $("camMsg").hidden = false; $("camMsg").innerHTML = "<span>Press <b>Start System</b> to open the laptop camera</span>";
   player.pause(); player.onended(); $("btnStart").disabled = false;
   setDot("v-cam", "Off", "off"); setDot("v-voice", "Standby", "off");
+  setDot("v-arduino", "Disconnected", "off");
+  if ($("ardPortText")) $("ardPortText").textContent = "Disconnected";
+  if ($("ardSentCmd")) $("ardSentCmd").textContent = "—";
+  if ($("ardAck")) $("ardAck").textContent = "—";
   $("tile").className = "tile idle"; $("tileText").textContent = "STANDBY"; $("tileSub").textContent = "Waiting for a command";
   $("tileIcon").innerHTML = '<path d="M12 3a9 9 0 100 18 9 9 0 000-18z" opacity=".25"/>'; $("tileIcon").style.transform = "";
   $("vText").textContent = "—"; renderDetections([]); setMode("idle"); log("System stopped", "sys");

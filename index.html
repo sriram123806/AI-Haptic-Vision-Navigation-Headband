@@ -33,6 +33,7 @@
       <div class="pill"><svg class="ic"><use href="#i-chip"/></svg><div><b>YOLOv8</b><span id="v-yolo" class="dot off">Not connected</span></div></div>
       <div class="pill"><svg class="ic"><use href="#i-spk"/></svg><div><b>Voice</b><span id="v-voice" class="dot off">Standby</span></div></div>
       <div class="pill"><svg class="ic"><use href="#i-pulse"/></svg><div><b>Haptic</b><span class="dot sim">Simulation</span></div></div>
+      <div class="pill"><svg class="ic"><use href="#i-chip"/></svg><div><b>Arduino</b><span id="v-arduino" class="dot off">Disconnected</span></div></div>
     </div>
     <div class="clock"><span id="date"></span><span id="time"></span></div>
   </header>
@@ -90,6 +91,9 @@
         </div>
         <div id="hapState" class="hapbtn">VIBRATION READY</div>
         <div class="note">(Simulation only – No physical hardware)</div>
+        <div id="ardDbg" style="font-size:11px;color:#64748b;margin-top:6px;text-align:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:4px 8px;">
+          Arduino: <b id="ardPortText">Disconnected</b> &bull; TX: <b id="ardSentCmd" style="color:#2563eb;">—</b> &bull; ACK: <b id="ardAck" style="color:#16a34a;">—</b>
+        </div>
       </section>
     </div>
 

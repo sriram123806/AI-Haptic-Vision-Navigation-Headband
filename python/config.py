@@ -69,3 +69,12 @@ API_FRAME_URL = f"{API_BASE_URL}/api/frame"
 SEND_FRAMES_TO_SERVER = True
 FRAME_JPEG_QUALITY = 75       # JPEG compression quality for fast streaming
 FRAME_STREAM_FPS_LIMIT = 20   # Maximum frame POST rate to preserve bandwidth/CPU
+
+# ============================================================
+# ARDUINO NANO HAPTIC BRIDGE SETTINGS (PHASE 1: SERIAL TESTING)
+# ============================================================
+ARDUINO_ENABLED = True
+# Set to "AUTO" to automatically detect the Arduino Nano (CH340/FTDI),
+# or specify explicitly (e.g. "COM7" on Windows). Set to False to disable.
+ARDUINO_PORT = "AUTO"
+ARDUINO_BAUD = 115200

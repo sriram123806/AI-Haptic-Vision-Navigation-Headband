@@ -295,3 +295,47 @@ In the physical wristband phase:
   - **Right Wrist / Right Motor:** Pulsed vibration indicates *Move Right*.
   - **Both Motors (Continuous Rapid):** Emergency *STOP* or obstacle directly ahead.
   - **Intermittent Rhythm:** *Slow Down* or *Wait*.
+
+---
+
+## 18. Arduino Nano USB Integration (Phase 1: Serial Communication)
+
+### Phase 1 Objective
+Establish and verify non-blocking USB serial communication between the Python AI application and the physical Arduino Nano before wiring vibration motors. **No motors or transistors are connected in this phase.**
+
+### Serial Command Protocol
+The Python AI engine sends newline-terminated single ASCII characters at **115200 baud**:
+
+| AI Navigation Decision | Serial Code | Arduino Action / Acknowledgement |
+|---|---|---|
+| `move_left` | `L\n` | Built-in LED blinks & responds `ACK:L` |
+| `move_right` | `R\n` | Built-in LED blinks & responds `ACK:R` |
+| `stop`, `slow_down`, `wait_for_a_while`, `obstacle_detected`, `move_backward` | `S\n` | Built-in LED blinks & responds `ACK:S` |
+| `move_straight`, `start_walking`, `system_ready` | `C\n` | Built-in LED blinks & responds `ACK:C` |
+| *Startup / Reboot* | — | Arduino broadcasts `HAPTIC_READY` |
+
+### Step 1: Upload Test Sketch to Arduino Nano
+1. Open the **Arduino IDE**.
+2. Open [`arduino/nano_haptic_test/nano_haptic_test.ino`](arduino/nano_haptic_test/nano_haptic_test.ino).
+3. In **Tools > Board**, select **Arduino AVR Boards > Arduino Nano**.
+4. In **Tools > Processor**, select **ATmega328P** (or **ATmega328P (Old Bootloader)** for CH340 clones).
+5. In **Tools > Port**, select your Arduino COM port (e.g., `COM7`).
+6. Click **Upload** (➔).
+7. Close the Arduino IDE Serial Monitor so Python can access the COM port.
+
+### Step 2: Run the Safe Serial Standalone Test
+Run the dedicated test script (no webcam or YOLO required):
+```bash
+python test_arduino.py
+```
+This test transmits:
+$$\mathbf{C} \longrightarrow \mathbf{L} \longrightarrow \mathbf{R} \longrightarrow \mathbf{S} \longrightarrow \mathbf{C}$$
+and verifies that the Arduino returns matching `ACK:C`, `ACK:L`, `ACK:R`, `ACK:S`, and `ACK:C`.
+
+### Step 3: Run the Live AI Pipeline with Arduino
+```bash
+python python/main.py
+```
+* The dashboard displays the real-time Arduino status pill (`Connected`, `Connecting`, `Disconnected`).
+* When YOLOv8 detects an obstacle and confirms a navigation command, the serial code is automatically transmitted to the Arduino.
+* The dashboard wristband card displays the active port, transmitted code, and Arduino acknowledgement.

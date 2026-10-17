@@ -37,7 +37,11 @@ class StateSender:
         detections: List[Dict[str, Any]],
         log_message: str,
         sub: str = "",
-        demo: bool = False
+        demo: bool = False,
+        arduino_status: str = "Disconnected",
+        arduino_command: str = "—",
+        arduino_ack: str = "—",
+        arduino_port: str = ""
     ) -> bool:
         """
         Sends navigation state and detections to POST /api/state.
@@ -57,7 +61,11 @@ class StateSender:
             "detections": clean_dets,
             "log_message": log_message,
             "sub": sub,
-            "demo": demo
+            "demo": demo,
+            "arduino_status": arduino_status,
+            "arduino_command": arduino_command,
+            "arduino_ack": arduino_ack,
+            "arduino_port": arduino_port
         }
 
         try:
