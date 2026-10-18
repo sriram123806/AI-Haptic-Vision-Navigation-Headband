@@ -49,15 +49,14 @@ const int LEFT_MOTOR_PIN = 5;   // D5 → 2N2222 → Left vibration motor
 const int RIGHT_MOTOR_PIN= 6;   // D6 → 2N2222 → Right vibration motor
 
 // ── Timing & Power Constants ─────────────────────────────────────────────────────────
-const int MOTOR_PWM_POWER  = 160;   // Safe ~3.2V drive for vibration motors / bright for LEDs
-const int SINGLE_PULSE_ON  = 1200;  // 1.2 FULL SECONDS: Clearly visible light and noticeable vibration
-const int SINGLE_PULSE_OFF = 100;   // Settle time between commands
+const int SINGLE_PULSE_ON  = 250;   // 250 ms: Crisp, distinct haptic buzz (standard assistive duration)
+const int SINGLE_PULSE_OFF = 60;    // 60 ms settle time between commands
 
-const int ALERT_PULSE_ON   = 250;   // 250 ms burst for alert pulses
-const int ALERT_PULSE_OFF  = 150;   // 150 ms gap between alert pulses
-const int ALERT_REPEATS    = 3;     // 3 distinct alert bursts for S command
+const int ALERT_PULSE_ON   = 120;   // 120 ms burst for alert pulses
+const int ALERT_PULSE_OFF  = 80;    // 80 ms gap between alert pulses
+const int ALERT_REPEATS    = 2;     // 2 distinct alert bursts for S command
 
-const int LED_BLINK_MS     = 100;   // Visual confirmation duration
+const int LED_BLINK_MS     = 60;    // Visual confirmation duration
 
 // ─────────────────────────────────────────────────────────────────────────────────────
 void setup() {
@@ -137,52 +136,35 @@ void loop() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────
-// pulseMotor(): turn ONE motor ON with soft start & soft stop to protect power rail
+// pulseMotor(): turn ONE motor ON firmly with full transistor saturation drive
 // ─────────────────────────────────────────────────────────────────────────────────────
 void pulseMotor(int pin, int durationMs) {
-  digitalWrite(LED_PIN, HIGH);  // Turn on onboard Pin 13 LED for visible proof
-
-  // Soft start ramp (prevents instant inrush current surge)
-  for (int p = 40; p <= MOTOR_PWM_POWER; p += 35) {
-    analogWrite(pin, p);
-    delay(5);
-  }
-  analogWrite(pin, MOTOR_PWM_POWER);
+  digitalWrite(LED_PIN, HIGH);  // Turn on onboard Pin 13 LED
+  digitalWrite(pin, HIGH);      // Full 5V drive to base resistor for maximum torque
   delay(durationMs);
-
-  // Soft stop ramp (smooth current decay eliminates inductive flyback spike)
-  for (int p = MOTOR_PWM_POWER; p >= 0; p -= 35) {
-    analogWrite(pin, p);
-    delay(5);
-  }
-  analogWrite(pin, 0);
-  digitalWrite(pin, LOW);
+  digitalWrite(pin, LOW);       // Turn motor OFF
   digitalWrite(LED_PIN, LOW);   // Turn off onboard Pin 13 LED
-  delay(SINGLE_PULSE_OFF);  // settle time
+  delay(SINGLE_PULSE_OFF);      // Settle time
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────
-// alertBothMotors(): alternating soft pulses between Left & Right
+// alertBothMotors(): alternating solid pulses between Left & Right
 // ─────────────────────────────────────────────────────────────────────────────────────
 void alertBothMotors() {
   for (int i = 0; i < ALERT_REPEATS; i++) {
-    // Pulse Left + LED
+    // Pulse Left Motor
     digitalWrite(LED_PIN, HIGH);
-    for (int p = 40; p <= MOTOR_PWM_POWER; p += 40) { analogWrite(LEFT_MOTOR_PIN, p); delay(5); }
+    digitalWrite(LEFT_MOTOR_PIN, HIGH);
     delay(ALERT_PULSE_ON);
-    for (int p = MOTOR_PWM_POWER; p >= 0; p -= 40) { analogWrite(LEFT_MOTOR_PIN, p); delay(5); }
-    analogWrite(LEFT_MOTOR_PIN, 0);
     digitalWrite(LEFT_MOTOR_PIN, LOW);
     digitalWrite(LED_PIN, LOW);
 
-    delay(30);
+    delay(40);
 
-    // Pulse Right + LED
+    // Pulse Right Motor
     digitalWrite(LED_PIN, HIGH);
-    for (int p = 40; p <= MOTOR_PWM_POWER; p += 40) { analogWrite(RIGHT_MOTOR_PIN, p); delay(5); }
+    digitalWrite(RIGHT_MOTOR_PIN, HIGH);
     delay(ALERT_PULSE_ON);
-    for (int p = MOTOR_PWM_POWER; p >= 0; p -= 40) { analogWrite(RIGHT_MOTOR_PIN, p); delay(5); }
-    analogWrite(RIGHT_MOTOR_PIN, 0);
     digitalWrite(RIGHT_MOTOR_PIN, LOW);
     digitalWrite(LED_PIN, LOW);
 
@@ -194,10 +176,9 @@ void alertBothMotors() {
 // stopAllMotors(): immediately cut power to both motors
 // ─────────────────────────────────────────────────────────────────────────────────────
 void stopAllMotors() {
-  analogWrite(LEFT_MOTOR_PIN, 0);
-  analogWrite(RIGHT_MOTOR_PIN, 0);
   digitalWrite(LEFT_MOTOR_PIN, LOW);
   digitalWrite(RIGHT_MOTOR_PIN, LOW);
+  digitalWrite(LED_PIN, LOW);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────────────
